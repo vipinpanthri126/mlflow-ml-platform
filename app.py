@@ -480,6 +480,18 @@ elif page == "🏗️ Model Building":
 
         st.info(f"📊 Task Type: **{task_type.title()}** | Features: **{len(features_to_use)}** | Target: **{target}**")
 
+        # ── Choose Final Variables ────────────────────────────
+        st.subheader("🎯 Choose Final Variables")
+        features_to_use = st.multiselect(
+            "Select the variables to use for model training",
+            features_to_use,
+            default=features_to_use,
+            key="final_vars",
+        )
+        st.success(f"✅ **{len(features_to_use)}** variables selected for training")
+
+        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+
         col1, col2 = st.columns(2)
         with col1:
             available_models = get_available_models(task_type)

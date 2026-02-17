@@ -665,29 +665,52 @@ elif page == "✅ OOT Validation":
         if st.button("🔄 Run OOT Validation", type="primary"):
             with st.spinner("Scoring OOT data..."):
                 result = validate_oot(model_uri, st.session_state.oot_data, target, task_type)
-                st.session_state.oot_metrics = result["metrics"]
+                
+                if result.get("has_target", True):
+                    st.session_state.oot_metrics = result["metrics"]
 
-                # Display metrics
-                st.subheader("📊 OOT Metrics")
-                cols = st.columns(len(result["metrics"]))
-                for i, (k, v) in enumerate(result["metrics"].items()):
-                    cols[i].metric(k.replace("oot_", "").replace("_", " ").title(), f"{v:.4f}")
+                    # Display metrics
+                    st.subheader("📊 OOT Metrics")
+                    cols = st.columns(len(result["metrics"]))
+                    for i, (k, v) in enumerate(result["metrics"].items()):
+                        cols[i].metric(k.replace("oot_", "").replace("_", " ").title(), f"{v:.4f}")
 
-                # Confusion matrix for classification
-                if task_type == "classification":
-                    cm_fig = generate_confusion_matrix_plot(result["y_true"], result["y_pred"])
-                    st.plotly_chart(cm_fig, use_container_width=True)
+                    # Confusion matrix for classification
+                    if task_type == "classification":
+                        cm_fig = generate_confusion_matrix_plot(result["y_true"], result["y_pred"])
+                        st.plotly_chart(cm_fig, use_container_width=True)
+                else:
+                    st.warning("⚠️ Target column not found in OOT data. Metrics cannot be calculated.")
+                    st.success("✅ Predictions generated successfully!")
+                
+                # Show predictions snippet
+                st.subheader("🔮 Predictions Preview")
+                pred_df = st.session_state.oot_data.copy()
+                pred_df["Prediction"] = result["y_pred"]
+                if result.get("y_prob") is not None:
+                    if task_type == "classification":
+                         # Assuming binary/multiclass probas
+                         if result["y_prob"].ndim > 1:
+                             for i in range(result["y_prob"].shape[1]):
+                                 pred_df[f"Prob_Class_{i}"] = result["y_prob"][:, i]
+                         else:
+                             pred_df["Prob_Class_1"] = result["y_prob"]
+                
+                st.dataframe(pred_df.head(), use_container_width=True)
 
                 # Train vs OOT comparison
-                if st.session_state.best_model in st.session_state.trained_models:
+                if st.session_state.best_model in st.session_state.trained_models and result.get("has_target", True):
                     train_metrics = st.session_state.trained_models[st.session_state.best_model]["metrics"]
                     comp_fig = generate_performance_comparison_plot(train_metrics, result["metrics"], task_type)
                     if comp_fig:
                         st.plotly_chart(comp_fig, use_container_width=True)
 
                 # Report
-                report = generate_validation_report(result["metrics"], task_type)
-                st.markdown(report)
+                if result.get("has_target", True):
+                    report = generate_validation_report(result["metrics"], task_type)
+                    st.markdown(report)
+                else:
+                    st.markdown("**Note:** Validation report skipped because target column is missing.")
 
         # Feedback loop
         st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)

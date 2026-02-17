@@ -18,10 +18,19 @@ import json
 def validate_oot(model_uri: str, oot_df: pd.DataFrame, target: str, task_type: str) -> dict:
     """Load a trained model and validate on OOT dataset."""
     model = mlflow.sklearn.load_model(model_uri)
-    X_oot = oot_df.drop(columns=[target])
-    y_oot = oot_df[target]
+    
+    # Check if target column exists in OOT data
+    if target in oot_df.columns:
+        X_oot = oot_df.drop(columns=[target])
+        y_oot = oot_df[target]
+        has_target = True
+    else:
+        # Prediction only mode
+        X_oot = oot_df
+        y_oot = None
+        has_target = False
 
-    if y_oot.dtype == "object":
+    if has_target and y_oot.dtype == "object":
         y_oot = y_oot.astype("category").cat.codes
 
     y_pred = model.predict(X_oot)
@@ -32,33 +41,36 @@ def validate_oot(model_uri: str, oot_df: pd.DataFrame, target: str, task_type: s
         except Exception:
             pass
 
-    if task_type == "classification":
-        metrics = {
-            "oot_accuracy": accuracy_score(y_oot, y_pred),
-            "oot_f1_score": f1_score(y_oot, y_pred, average="weighted", zero_division=0),
-            "oot_precision": precision_score(y_oot, y_pred, average="weighted", zero_division=0),
-            "oot_recall": recall_score(y_oot, y_pred, average="weighted", zero_division=0),
-        }
-        if y_prob is not None:
-            try:
-                if len(np.unique(y_oot)) == 2:
-                    metrics["oot_auc_roc"] = roc_auc_score(y_oot, y_prob[:, 1] if y_prob.ndim > 1 else y_prob)
-                else:
-                    metrics["oot_auc_roc"] = roc_auc_score(y_oot, y_prob, multi_class="ovr", average="weighted")
-            except Exception:
-                pass
-    else:
-        metrics = {
-            "oot_rmse": np.sqrt(mean_squared_error(y_oot, y_pred)),
-            "oot_mae": mean_absolute_error(y_oot, y_pred),
-            "oot_r2": r2_score(y_oot, y_pred),
-        }
+    metrics = {}
+    if has_target:
+        if task_type == "classification":
+            metrics = {
+                "oot_accuracy": accuracy_score(y_oot, y_pred),
+                "oot_f1_score": f1_score(y_oot, y_pred, average="weighted", zero_division=0),
+                "oot_precision": precision_score(y_oot, y_pred, average="weighted", zero_division=0),
+                "oot_recall": recall_score(y_oot, y_pred, average="weighted", zero_division=0),
+            }
+            if y_prob is not None:
+                try:
+                    if len(np.unique(y_oot)) == 2:
+                        metrics["oot_auc_roc"] = roc_auc_score(y_oot, y_prob[:, 1] if y_prob.ndim > 1 else y_prob)
+                    else:
+                        metrics["oot_auc_roc"] = roc_auc_score(y_oot, y_prob, multi_class="ovr", average="weighted")
+                except Exception:
+                    pass
+        else:
+            metrics = {
+                "oot_rmse": np.sqrt(mean_squared_error(y_oot, y_pred)),
+                "oot_mae": mean_absolute_error(y_oot, y_pred),
+                "oot_r2": r2_score(y_oot, y_pred),
+            }
 
     return {
         "metrics": metrics,
         "y_true": y_oot,
         "y_pred": y_pred,
         "y_prob": y_prob,
+        "has_target": has_target
     }
 
 

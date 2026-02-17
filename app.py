@@ -280,11 +280,12 @@ elif page == "📊 Vibe Analysis (EDA)":
             get_descriptive_stats, get_categorical_stats, detect_outliers,
             generate_distribution_plots, generate_correlation_matrix,
             get_missing_value_report, generate_target_analysis,
+            replace_special_with_nan, impute_column,
         )
         from src.utils import dataframe_summary
 
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📋 Statistics", "📉 Distributions", "🔗 Correlations", "⚡ Outliers", "🤖 AI Summary"
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+            "📋 Statistics", "📉 Distributions", "🔗 Correlations", "⚡ Outliers", "🤖 AI Summary", "🛠️ Handling Missing Values"
         ])
 
         with tab1:
@@ -350,6 +351,51 @@ elif page == "📊 Vibe Analysis (EDA)":
 
             if st.session_state.eda_summary:
                 st.markdown(st.session_state.eda_summary)
+
+        with tab6:
+            st.subheader("🛠️ Handling Missing & Special Values")
+            
+            # Section 1: Replace Special Values
+            st.markdown("### 1️⃣ Replace Special Values with NaN")
+            st.caption("Replace placeholders like `?`, `-999`, or `N/A` with standard missing values.")
+            
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                special_val = st.text_input("Value to replace", placeholder="e.g., ?")
+            with c2:
+                target_cols = st.multiselect("Select columns", df.columns.tolist())
+                
+            if st.button("Replace with NaN", disabled=not (special_val and target_cols)):
+                st.session_state.train_data = replace_special_with_nan(df, target_cols, special_val)
+                st.success(f"✅ Replaced '{special_val}' with NaN in {len(target_cols)} columns.")
+                st.rerun()
+
+            st.markdown("---")
+
+            # Section 2: Impute Missing Values
+            st.markdown("### 2️⃣ Impute Missing Values")
+            cols_with_missing = df.columns[df.isnull().any()].tolist()
+            
+            if not cols_with_missing:
+                st.success("🎉 No missing values found in the dataset!")
+            else:
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    imp_col = st.selectbox("Select Column", cols_with_missing)
+                with c2:
+                    imp_method = st.selectbox("Imputation Method", ["mean", "median", "mode", "manual"])
+                with c3:
+                    manual_val = None
+                    if imp_method == "manual":
+                        manual_val = st.text_input("Enter Value", placeholder="Value to fill")
+                
+                if st.button(f"Impute `{imp_col}`"):
+                    if imp_method == "manual" and manual_val is None:
+                        st.error("⚠️ Please enter a value for manual imputation.")
+                    else:
+                        st.session_state.train_data = impute_column(df, imp_col, imp_method, manual_val)
+                        st.success(f"✅ Imputed `{imp_col}` using {imp_method}.")
+                        st.rerun()
 
     next_step_button(page)
 

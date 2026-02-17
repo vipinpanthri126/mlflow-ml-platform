@@ -130,3 +130,49 @@ def generate_target_analysis(df: pd.DataFrame, target: str):
         )
     fig.update_layout(height=350, margin=dict(t=40, b=20, l=20, r=20))
     return fig
+
+
+def replace_special_with_nan(df: pd.DataFrame, columns: list, value: str):
+    """Replace special values (e.g., '?', '-999') with np.nan."""
+    for col in columns:
+        if col in df.columns:
+            # Handle numeric conversion if possible after replacement
+            df[col] = df[col].replace(value, np.nan)
+            # Try to convert to numeric if the column was object type solely due to the special char
+            try:
+                df[col] = pd.to_numeric(df[col])
+            except (ValueError, TypeError):
+                pass
+    return df
+
+
+def impute_column(df: pd.DataFrame, column: str, method: str, value=None):
+    """
+    Impute missing values in a column.
+    Methods: 'mean', 'median', 'mode', 'manual'
+    """
+    if column not in df.columns:
+        return df
+
+    if method == "mean":
+        if pd.api.types.is_numeric_dtype(df[column]):
+            fill_val = df[column].mean()
+            df[column] = df[column].fillna(fill_val)
+    elif method == "median":
+        if pd.api.types.is_numeric_dtype(df[column]):
+            fill_val = df[column].median()
+            df[column] = df[column].fillna(fill_val)
+    elif method == "mode":
+        if not df[column].mode().empty:
+            fill_val = df[column].mode()[0]
+            df[column] = df[column].fillna(fill_val)
+    elif method == "manual" and value is not None:
+        # Try to convert value to column type
+        if pd.api.types.is_numeric_dtype(df[column]):
+            try:
+                value = float(value)
+            except ValueError:
+                pass  # Keep as string or original type if conversion fails
+        df[column] = df[column].fillna(value)
+    
+    return df

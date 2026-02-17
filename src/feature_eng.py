@@ -87,66 +87,84 @@ def get_shadow_model_importance(df: pd.DataFrame, target: str) -> pd.DataFrame:
     return importance
 
 
-def generate_shap_plots(pipeline, X: pd.DataFrame):
-    """Generate SHAP summary plot for a trained pipeline."""
+def calculate_shap_values(df: pd.DataFrame, target: str):
+    """Calculate SHAP values using a shadow Random Forest."""
     import shap
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+    from sklearn.impute import SimpleImputer
+    import matplotlib.pyplot as plt
 
+    features = df.drop(columns=[target])
+    y = df[target]
+    numeric_cols = features.select_dtypes(include=[np.number]).columns.tolist()
+
+    if len(numeric_cols) == 0:
+        return None, None
+
+    X = features[numeric_cols].copy()
+    imputer = SimpleImputer(strategy="median")
+    X_imputed = pd.DataFrame(imputer.fit_transform(X), columns=numeric_cols)
+
+    if y.dtype == "object" or y.nunique() <= 20:
+        y_encoded = y.astype("category").cat.codes
+        model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42, n_jobs=-1)
+    else:
+        y_encoded = y
+        model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42, n_jobs=-1)
+
+    model.fit(X_imputed, y_encoded)
+
+    sample = X_imputed.sample(n=min(100, len(X_imputed)), random_state=42)
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(sample)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    if isinstance(shap_values, list):
+        shap.summary_plot(shap_values[1], sample, show=False)
+    else:
+        shap.summary_plot(shap_values, sample, show=False)
+    fig = plt.gcf()
+    plt.tight_layout()
+
+    # Mean absolute SHAP for ranking
     try:
-        # Extract the model from the pipeline
-        model = pipeline.named_steps["model"]
-        preprocessor = pipeline.named_steps["preprocessor"]
-
-        # Transform data
-        X_transformed = preprocessor.transform(X)
-
-        # Get feature names after transformation
-        feature_names = []
-        for name, trans, cols in preprocessor.transformers_:
-            if name == "num":
-                feature_names.extend(cols)
-            elif name == "cat":
-                if hasattr(trans.named_steps.get("onehot", None), "get_feature_names_out"):
-                    feature_names.extend(trans.named_steps["onehot"].get_feature_names_out(cols).tolist())
-                else:
-                    feature_names.extend(cols)
-
-        if isinstance(X_transformed, np.ndarray):
-            X_df = pd.DataFrame(X_transformed, columns=feature_names[:X_transformed.shape[1]])
-        else:
-            X_df = pd.DataFrame(X_transformed.toarray() if hasattr(X_transformed, "toarray") else X_transformed,
-                                columns=feature_names[:X_transformed.shape[1]])
-
-        sample = X_df.sample(n=min(100, len(X_df)), random_state=42)
-
-        # Use TreeExplainer for tree-based, KernelExplainer otherwise
-        if hasattr(model, "feature_importances_"):
-            explainer = shap.TreeExplainer(model)
-        else:
-            explainer = shap.KernelExplainer(model.predict, sample.iloc[:20])
-
-        shap_values = explainer.shap_values(sample)
-
-        # Summary plot
-        fig_summary, ax = plt.subplots(figsize=(10, 6))
         if isinstance(shap_values, list):
-            shap.summary_plot(shap_values[1], sample, show=False)
+            # For classification, taking the class 1 (positive) or 0 if binary
+            vals = shap_values[1] if len(shap_values) > 1 else shap_values[0]
         else:
-            shap.summary_plot(shap_values, sample, show=False)
-        fig_summary = plt.gcf()
-        plt.tight_layout()
+            vals = shap_values
 
-        # Bar plot
-        fig_bar, ax2 = plt.subplots(figsize=(10, 6))
-        if isinstance(shap_values, list):
-            shap.summary_plot(shap_values[1], sample, plot_type="bar", show=False)
-        else:
-            shap.summary_plot(shap_values, sample, plot_type="bar", show=False)
-        fig_bar = plt.gcf()
-        plt.tight_layout()
+        # Debugging: Print shapes
+        print(f"DEBUG: shap_values type: {type(shap_values)}")
+        if hasattr(vals, "shape"):
+            print(f"DEBUG: vals shape: {vals.shape}")
+        
+        # Calculate mean absolute SHAP
+        # vals shape might be (samples, features) or (samples, features, classes)
+        
+        # 1. Take absolute values
+        abs_vals = np.abs(vals)
+        
+        # 2. Average over samples (axis 0)
+        # Result shape: (features,) for regression, (features, classes) for classification
+        feature_importance = abs_vals.mean(axis=0)
+        
+        if feature_importance.ndim > 1:
+            feature_importance = feature_importance.sum(axis=1)
+            
+        mean_shap = feature_importance
 
-        return fig_summary, fig_bar, feature_names
     except Exception as e:
-        return None, None, str(e)
+        print(f"ERROR calculating mean_shap: {e}")
+        # Fallback to zeros
+        mean_shap = np.zeros(len(numeric_cols))
+
+    shap_importance = pd.DataFrame({
+        "Feature": numeric_cols,
+        "Mean_SHAP": mean_shap,
+    }).sort_values("Mean_SHAP", ascending=False)
+
+    return fig, shap_importance
 
 
 def apply_feature_engineering(df: pd.DataFrame, sme_inputs: str, target: str) -> pd.DataFrame:

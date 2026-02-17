@@ -19,12 +19,32 @@ def get_llm(api_key: str):
 
 
 def _invoke_llm(llm, prompt: str) -> str:
-    """Safely invoke the LLM and return text."""
-    try:
-        response = llm.invoke(prompt)
-        return response.content
-    except Exception as e:
-        return f"⚠️ LLM Error: {str(e)}"
+    """Safely invoke the LLM with retry logic for rate limits."""
+    import time
+    max_retries = 3
+    base_delay = 5  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            response = llm.invoke(prompt)
+            return response.content
+            
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                # Rate limit hit
+                if attempt < max_retries - 1:
+                    wait_time = base_delay * (2 ** attempt)  # 5, 10, 20 seconds
+                    print(f"⚠️ LLM Rate Limit hit. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    return f"⚠️ LLM Error: Rate limit exceeded after {max_retries} retries. Please try again later."
+            else:
+                # Proceed to other errors immediately
+                return f"⚠️ LLM Error: {error_msg}"
+    
+    return "⚠️ LLM Error: Unknown error occurred."
 
 
 def summarize_eda(api_key: str, stats_text: str, problem_statement: str, sme_inputs: str) -> str:
@@ -35,12 +55,14 @@ def summarize_eda(api_key: str, stats_text: str, problem_statement: str, sme_inp
 
     prompt = f"""You are a senior data scientist. Analyze the following dataset statistics and provide a comprehensive EDA summary.
 
+    (Note: Statistics might be truncated for brevity)
+
 **Business Problem:** {problem_statement}
 
 **SME/Domain Inputs:** {sme_inputs}
 
 **Dataset Statistics:**
-{stats_text}
+{stats_text[:12000]} 
 
 Please provide:
 1. **Data Quality Assessment**: Missing values, data types, potential issues
@@ -63,7 +85,7 @@ def suggest_features(api_key: str, eda_summary: str, sme_inputs: str, columns: l
     prompt = f"""You are a senior data scientist. Based on the EDA summary and domain expertise, suggest feature engineering ideas.
 
 **EDA Summary:**
-{eda_summary}
+{eda_summary[:10000]}
 
 **SME/Domain Inputs:**
 {sme_inputs}

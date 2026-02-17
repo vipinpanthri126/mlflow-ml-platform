@@ -151,6 +151,16 @@ def train_with_mlflow(
             mlflow.log_metric("cv_best_score", grid.best_score_)
         else:
             best_pipeline = pipeline
+            if params:
+                # Apply manual hyperparameters
+                try:
+                    best_pipeline.set_params(**params)
+                    mlflow.log_params(params)
+                except Exception as e:
+                    # In a real app we might want to surface this error better, 
+                    # but for now we'll log it and continue with defaults
+                    print(f"WARNING: Could not set params {params}: {e}")
+            
             best_pipeline.fit(X_train, y_train)
 
         # Predict & score

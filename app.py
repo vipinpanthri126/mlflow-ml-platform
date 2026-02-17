@@ -567,7 +567,30 @@ elif page == "🏗️ Model Building":
                 st.write(f"🔄 Training **{model_name}**...")
                 model = available_models[model_name]
                 pipeline = build_pipeline(model, numeric_cols, cat_cols)
-                params = grids.get(model_name, {}) if do_grid_search else None
+                
+                # Manual Parameters Logic
+                manual_params = {}
+                if not do_grid_search:
+                    with st.expander(f"⚙️ Advanced Config for {model_name}"):
+                        default_json = "{}"
+                        # Example placeholder for guidance
+                        if "XGBoost" in model_name: 
+                            st.caption("Example: {\"model__n_estimators\": 200, \"model__max_depth\": 10, \"model__learning_rate\": 0.05}")
+                        elif "Random Forest" in model_name:
+                            st.caption("Example: {\"model__n_estimators\": 200, \"model__max_depth\": 20}")
+                            
+                        params_str = st.text_area(
+                            "Hyperparameters (JSON)", 
+                            value=default_json, 
+                            key=f"params_{model_name}_{i}"
+                        )
+                        try:
+                            manual_params = json.loads(params_str)
+                        except json.JSONDecodeError:
+                            st.error(f"Invalid JSON for {model_name}. Using defaults.")
+                            manual_params = {}
+
+                params = grids.get(model_name, {}) if do_grid_search else manual_params
 
                 result = train_with_mlflow(
                     pipeline, X_train, y_train, X_test, y_test,

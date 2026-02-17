@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
     accuracy_score, f1_score, roc_auc_score, precision_score, recall_score,
-    mean_squared_error, r2_score, mean_absolute_error
+    mean_squared_error, r2_score, mean_absolute_error, roc_curve
 )
 
 
@@ -101,11 +101,18 @@ def calculate_metrics(y_true, y_pred, y_prob, task_type: str) -> dict:
         if y_prob is not None:
             try:
                 if len(np.unique(y_true)) == 2:
+                    # Binary Classification
                     metrics["auc_roc"] = roc_auc_score(y_true, y_prob[:, 1] if y_prob.ndim > 1 else y_prob)
+                    
+                    # Calculate KS Statistic
+                    fpr, tpr, thresholds = roc_curve(y_true, y_prob[:, 1] if y_prob.ndim > 1 else y_prob)
+                    metrics["ks_stat"] = max(tpr - fpr)
                 else:
                     metrics["auc_roc"] = roc_auc_score(y_true, y_prob, multi_class="ovr", average="weighted")
+                    metrics["ks_stat"] = 0.0 # KS not applicable for multi-class
             except Exception:
                 metrics["auc_roc"] = 0.0
+                metrics["ks_stat"] = 0.0
     else:
         metrics = {
             "rmse": np.sqrt(mean_squared_error(y_true, y_pred)),

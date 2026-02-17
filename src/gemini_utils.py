@@ -35,7 +35,7 @@ def _invoke_llm(llm, prompt: str) -> str:
                 # Rate limit hit
                 if attempt < max_retries - 1:
                     wait_time = base_delay * (2 ** attempt)  # 5, 10, 20 seconds
-                    print(f"⚠️ LLM Rate Limit hit. Retrying in {wait_time}s...")
+                    print(f"LLM Rate Limit hit. Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                     continue
                 else:
@@ -112,7 +112,7 @@ def generate_documentation(api_key: str, model_info: dict) -> str:
     prompt = f"""You are a model risk management expert. Generate comprehensive model documentation based on the following information.
 
 **Model Information:**
-{str(model_info)}
+{str(model_info)[:10000]}
 
 Generate a complete Model Development Document covering:
 1. **Executive Summary**
@@ -158,7 +158,7 @@ def generate_monitoring_recommendations(api_key: str, model_info: dict) -> str:
     prompt = f"""You are a model risk management expert. Create a comprehensive ongoing model monitoring plan.
 
 **Model Information:**
-{str(model_info)}
+{str(model_info)[:10000]}
 
 Create a monitoring plan that covers:
 1. **Performance Monitoring**: KPIs, thresholds, frequency

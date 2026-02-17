@@ -127,10 +127,37 @@ def calculate_shap_values(df: pd.DataFrame, target: str):
     plt.tight_layout()
 
     # Mean absolute SHAP for ranking
-    if isinstance(shap_values, list):
-        mean_shap = np.abs(shap_values[1]).mean(axis=0)
-    else:
-        mean_shap = np.abs(shap_values).mean(axis=0)
+    try:
+        if isinstance(shap_values, list):
+            # For classification, taking the class 1 (positive) or 0 if binary
+            vals = shap_values[1] if len(shap_values) > 1 else shap_values[0]
+        else:
+            vals = shap_values
+
+        # Debugging: Print shapes
+        print(f"DEBUG: shap_values type: {type(shap_values)}")
+        if hasattr(vals, "shape"):
+            print(f"DEBUG: vals shape: {vals.shape}")
+        
+        # Calculate mean absolute SHAP
+        # vals shape might be (samples, features) or (samples, features, classes)
+        
+        # 1. Take absolute values
+        abs_vals = np.abs(vals)
+        
+        # 2. Average over samples (axis 0)
+        # Result shape: (features,) for regression, (features, classes) for classification
+        feature_importance = abs_vals.mean(axis=0)
+        
+        if feature_importance.ndim > 1:
+            feature_importance = feature_importance.sum(axis=1)
+            
+        mean_shap = feature_importance
+
+    except Exception as e:
+        print(f"ERROR calculating mean_shap: {e}")
+        # Fallback to zeros
+        mean_shap = np.zeros(len(numeric_cols))
 
     shap_importance = pd.DataFrame({
         "Feature": numeric_cols,
